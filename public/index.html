@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clonagem Enzo</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --border:#2a2e38; --text:#e6e8ec; --muted:#8b93a7; --accent:#4f8cff; --ok:#3dd598; --err:#ff5c7a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:20px; }
+  .badge { padding:4px 10px; border-radius:12px; font-size:12px; }
+  .badge.ok { background:rgba(61,213,152,.15); color:var(--ok); }
+  .badge.err { background:rgba(255,92,122,.15); color:var(--err); }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  input, textarea, select { width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#0f1115; color:var(--text); font-family:inherit; }
+  button { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--accent); color:#fff; cursor:pointer; font-weight:600; }
+  button.secondary { background:transparent; color:var(--text); }
+  button.danger { background:var(--err); }
+  .row { display:flex; gap:8px; align-items:center; }
+  .fila-item { border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .fila-item .top { display:flex; gap:12px; align-items:center; }
+  .fila-item img { width:60px; height:60px; object-fit:cover; border-radius:8px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .status { font-size:12px; padding:2px 8px; border-radius:8px; background:#2a2e38; }
+  .status.clonado { background:rgba(10,132,255,.18); color:#0A84FF; }
+  .status.validado { background:rgba(61,213,152,.18); color:var(--ok); }
+  .status.com_erro { background:rgba(255,92,122,.18); color:var(--err); }
+  .editor { display:none; margin-top:12px; }
+  .editor.open { display:block; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .aviso { padding:10px; border-radius:8px; background:rgba(255,193,7,.1); border:1px solid rgba(255,193,7,.3); margin-bottom:10px; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><i class="bi bi-copy"></i> Clonagem Enzo</h1>
+  <div class="row">
+    <span id="statusConn" class="badge err">Desconectado</span>
+    <button id="btnConectar" class="secondary">Conectar conta ML</button>
+    <button id="btnDesconectar" class="secondary" style="display:none">Desconectar</button>
+  </div>
+</header>
+<main>
+  <div id="avisoConfig" class="aviso" style="display:none">
+    Configure o app ML (client_id/secret) em <code>storage/config.json</code> ou via variaveis de ambiente. <a href="#" onclick="abrirConfig();return false;">Configurar agora</a>
+  </div>
+
+  <div class="card">
+    <h3>Adicionar anuncio</h3>
+    <p class="muted">Cole o MLB ou o link do anuncio (pode colar varios separados por espaco/virgula).</p>
+    <textarea id="entrada" rows="3" placeholder="MLB123456789 ou https://..."></textarea>
+    <div class="row" style="margin-top:10px">
+      <button onclick="adicionar()">Adicionar a fila</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fila de clonagem</h3>
+    <div id="fila"></div>
+  </div>
+
+  <!-- Editor -->
+  <div class="card editor" id="editorCard">
+    <h3>Editar antes de clonar: <span id="edMlb"></span></h3>
+    <div class="grid">
+      <label>Titulo (family_name)<input id="edTitulo"></label>
+      <label>Preco<input id="edPreco" type="number" step="0.01"></label>
+      <label>Estoque<input id="edEstoque" type="number"></label>
+      <label>SKU<input id="edSku"></label>
+      <label>Tipo<select id="edTipo"><option value="gold_special">Classico</option><option value="gold_pro">Premium</option></select></label>
+    </div>
+    <label style="display:block;margin-top:10px">Descricao<textarea id="edDesc" rows="6"></textarea></label>
+    <div class="row" style="margin-top:10px">
+      <button onclick="salvarEdicao()">Salvar</button>
+      <button class="secondary" onclick="fecharEditor()">Fechar</button>
+      <button onclick="validarAtual()">Validar</button>
+      <button onclick="clonarAtual()">Clonar</button>
+    </div>
+    <div id="edMsg" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Config modal simples -->
+  <div class="card" id="configCard" style="display:none">
+    <h3>Configurar app ML</h3>
+    <label>Client ID<input id="cfgClient"></label>
+    <label style="display:block;margin-top:8px">Client Secret<input id="cfgSecret" type="password"></label>
+    <label style="display:block;margin-top:8px">Redirect URI<input id="cfgRedirect" value="http://localhost:3000/callback"></label>
+    <div class="row" style="margin-top:10px">
+      <button onclick="salvarConfig()">Salvar</button>
+      <button class="secondary" onclick="fecharConfig()">Fechar</button>
+    </div>
+  </div>
+</main>
+
+<script>
+let mlbAtual = null;
+let dados = null;
+
+async function api(url, opts) { const r = await fetch(url, opts); const j = await r.json(); if (!r.ok) throw new Error(j.erro || r.statusText); return j; }
+
+async function carregarStatus() {
+  const s = await api('/api/status');
+  const el = document.getElementById('statusConn');
+  if (s.conectado) { el.textContent = 'Conectado'; el.className = 'badge ok'; document.getElementById('btnConectar').style.display='none'; document.getElementById('btnDesconectar').style.display=''; }
+  else { el.textContent = 'Desconectado'; el.className = 'badge err'; document.getElementById('btnConectar').style.display=''; document.getElementById('btnDesconectar').style.display='none'; }
+  if (!s.cfg.client_id) document.getElementById('avisoConfig').style.display = 'block';
+}
+
+async function carregarFila() {
+  dados = await api('/api/clonagem');
+  const div = document.getElementById('fila');
+  div.innerHTML = '';
+  (dados.fila || []).forEach(r => {
+    const el = document.createElement('div');
+    el.className = 'fila-item';
+    el.innerHTML = `
+      <div class="top">
+        ${r.thumbnail ? `<img src="${r.thumbnail}">` : ''}
+        <div style="flex:1">
+          <div><b>${r.mlb}</b> <span class="status ${r.status}">${r.status}</span></div>
+          <div class="muted">${r.original?.titulo || ''} · R$ ${r.original?.preco} · estoque ${r.original?.estoque} · ${r.original?.fotos} fotos</div>
+          ${r.validacao?.erro ? `<div style="color:var(--err);font-size:12px;margin-top:4px">${r.validacao.erro}</div>` : ''}
+          ${r.clone ? `<div style="color:#0A84FF;font-size:12px;margin-top:4px">Clonado: ${r.clone.id} · ${r.clone.permalink || ''}</div>` : ''}
+        </div>
+        <div class="row">
+          <button class="secondary" onclick="abrirEditor('${r.mlb}')">Editar</button>
+          <button class="secondary" onclick="remover('${r.mlb}')">Remover</button>
+        </div>
+      </div>`;
+    div.appendChild(el);
+  });
+}
+
+async function adicionar() {
+  const t = document.getElementById('entrada').value;
+  try { await api('/api/clonagem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ texto: t }) }); document.getElementById('entrada').value=''; await carregarFila(); }
+  catch (e) { alert(e.message); }
+}
+
+async function remover(mlb) {
+  if (!confirm('Remover da fila?')) return;
+  await api('/api/clonagem/' + mlb, { method:'DELETE' });
+  await carregarFila();
+}
+
+function abrirEditor(mlb) {
+  mlbAtual = mlb;
+  const r = dados.fila.find(x => x.mlb === mlb);
+  const e = r.edicao;
+  document.getElementById('edMlb').textContent = mlb;
+  document.getElementById('edTitulo').value = e.titulo || '';
+  document.getElementById('edPreco').value = e.preco;
+  document.getElementById('edEstoque').value = e.estoque;
+  document.getElementById('edSku').value = e.sku || '';
+  document.getElementById('edTipo').value = e.tipo || 'gold_special';
+  document.getElementById('edDesc').value = e.descricao || '';
+  document.getElementById('editorCard').classList.add('open');
+}
+
+function fecharEditor() { document.getElementById('editorCard').classList.remove('open'); mlbAtual = null; }
+
+async function salvarEdicao() {
+  const body = {
+    titulo: document.getElementById('edTitulo').value,
+    preco: Number(document.getElementById('edPreco').value),
+    estoque: Number(document.getElementById('edEstoque').value),
+    sku: document.getElementById('edSku').value,
+    tipo: document.getElementById('edTipo').value,
+    descricao: document.getElementById('edDesc').value,
+  };
+  await api('/api/clonagem/' + mlbAtual + '/editar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  document.getElementById('edMsg').textContent = 'Salvo.';
+  await carregarFila();
+}
+
+async function validarAtual() {
+  document.getElementById('edMsg').textContent = 'Validando...';
+  const r = await api('/api/clonagem/' + mlbAtual + '/validar', { method:'POST' });
+  document.getElementById('edMsg').textContent = r.validacao?.ok ? 'Valido' + (r.validacao.avisos?.length ? ' · ' + r.validacao.avisos.join(' · ') : '') : 'Erro: ' + (r.validacao?.erro || '');
+  await carregarFila();
+}
+
+async function clonarAtual() {
+  if (!confirm('Criar o anuncio novo de verdade?')) return;
+  document.getElementById('edMsg').textContent = 'Clonando...';
+  const r = await api('/api/clonagem/' + mlbAtual + '/clonar', { method:'POST' });
+  document.getElementById('edMsg').textContent = r.status === 'clonado' ? 'Clonado: ' + r.clone.id : 'Erro: ' + (r.validacao?.erro || '');
+  await carregarFila();
+}
+
+function abrirConfig() { document.getElementById('configCard').style.display = 'block'; }
+function fecharConfig() { document.getElementById('configCard').style.display = 'none'; }
+async function salvarConfig() {
+  await api('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+    client_id: document.getElementById('cfgClient').value,
+    client_secret: document.getElementById('cfgSecret').value,
+    redirect_uri: document.getElementById('cfgRedirect').value,
+  }) });
+  alert('Salvo. Agora conecte a conta.');
+  fecharConfig();
+  await carregarStatus();
+}
+
+document.getElementById('btnConectar').onclick = () => { window.location.href = '/auth'; };
+document.getElementById('btnDesconectar').onclick = async () => { await api('/api/desconectar', { method:'POST' }); await carregarStatus(); await carregarFila(); };
+
+carregarStatus().then(carregarFila);
+</script>
+</body>
+</html>
