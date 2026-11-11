@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Ajustes — Clonagem Enzo</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; background:#0b1220; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e6edf7; }
+  .wrap { max-width:520px; margin:40px auto; padding:0 16px; }
+  .card { background:#111a2e; border:1px solid #223055; border-radius:16px; padding:24px; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 10px; color:#c6d3ea; }
+  .sub { color:#8c9bb8; font-size:13px; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:#8c9bb8; margin:12px 0 4px; }
+  input { width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid #2a3a63; background:#0b1427; color:#e6edf7; font-size:14px; }
+  button { margin-top:16px; padding:10px 16px; border:0; border-radius:10px; background:#2563eb; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.sec { background:#1f2a44; }
+  .msg { font-size:13px; margin-top:10px; min-height:16px; }
+  .ok { color:#4ade80; } .err { color:#f87171; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:8px 4px; border-top:1px solid #223055; }
+  .topo { display:flex; justify-content:space-between; align-items:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo">
+    <div><h1>Ajustes</h1><div class="sub" id="sub">Carregando…</div></div>
+    <button class="sec" id="sair" style="display:none" onclick="sair()">Sair</button>
+  </div>
+
+  <div class="card" id="bootstrap" style="display:none">
+    <h2>Primeiro acesso</h2>
+    <div class="sub">Crie o usuário e a senha que vão entrar no app. A senha fica guardada só em forma criptografada.</div>
+    <label>Usuário (letras, números, ponto, traço)</label><input id="b_usuario" autocomplete="off" autocapitalize="off">
+    <label>Nome de exibição</label><input id="b_nome">
+    <label>Senha (mínimo 10 caracteres)</label><input id="b_senha" type="password" autocomplete="new-password">
+    <label>Confirmar senha</label><input id="b_senha2" type="password" autocomplete="new-password">
+    <button onclick="criar('b')">Criar usuário</button>
+    <div class="msg" id="b_msg"></div>
+  </div>
+
+  <div class="card" id="gestao" style="display:none">
+    <h2>Usuários</h2>
+    <table><tbody id="lista"></tbody></table>
+  </div>
+
+  <div class="card" id="novo" style="display:none">
+    <h2>Criar ou trocar usuário</h2>
+    <div class="sub">Se o usuário já existir, a senha e o nome são trocados. Quem estiver logado com ele precisa entrar de novo.</div>
+    <label>Usuário</label><input id="n_usuario" autocomplete="off" autocapitalize="off">
+    <label>Nome de exibição</label><input id="n_nome">
+    <label>Nova senha (mínimo 10 caracteres)</label><input id="n_senha" type="password" autocomplete="new-password">
+    <label>Confirmar nova senha</label><input id="n_senha2" type="password" autocomplete="new-password">
+    <button onclick="criar('n')">Salvar</button>
+    <div class="msg" id="n_msg"></div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function carregar() {
+  const s = await fetch('/api/sessao').then(r => r.json());
+  if (!s.tem_usuarios) {
+    $('sub').textContent = 'Nenhum usuário cadastrado ainda.';
+    $('bootstrap').style.display = '';
+    return;
+  }
+  if (!s.logado) { location.href = '/login?volta=' + encodeURIComponent(location.pathname); return; }
+  $('sub').textContent = 'Entrou como ' + (s.nome || s.usuario) + '.';
+  $('sair').style.display = '';
+  $('gestao').style.display = ''; $('novo').style.display = '';
+  const r = await fetch('/api/admin/usuarios');
+  if (!r.ok) { location.href = '/login'; return; }
+  desenharLista((await r.json()).usuarios || []);
+}
+function desenharLista(us) {
+  $('lista').innerHTML = us.map(u => `<tr><td><b>${esc(u.usuario)}</b> · ${esc(u.nome)}${u.bloqueado ? ' <span class="err">(bloqueado)</span>' : ''}</td>
+    <td style="text-align:right"><button class="sec" onclick="preencher('${esc(u.usuario)}','${esc(u.nome)}')">Trocar senha</button></td></tr>`).join('') || '<tr><td>Nenhum usuário.</td></tr>';
+}
+function preencher(usuario, nome) {
+  $('n_usuario').value = usuario; $('n_nome').value = nome; $('n_senha').value = ''; $('n_senha2').value = '';
+  $('n_senha').focus();
+}
+async function criar(p) {
+  const v = (id) => $(p + '_' + id).value;
+  const msg = $(p + '_msg');
+  if (v('senha') !== v('senha2')) { msg.className = 'msg err'; msg.textContent = 'As senhas não batem.'; return; }
+  msg.className = 'msg'; msg.textContent = 'Salvando…';
+  const r = await fetch('/api/admin/usuarios', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: v('usuario'), nome: v('nome'), senha: v('senha') }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { msg.className = 'msg err'; msg.textContent = j.erro || 'Não consegui salvar.'; return; }
+  msg.className = 'msg ok';
+  msg.textContent = j.novo ? 'Usuário criado. Entre com ele na tela de login.' : 'Senha trocada. Entre de novo com a nova senha.';
+  // criar ou trocar a senha encerra a sessão atual: volta para a tela de login
+  setTimeout(() => location.href = '/login', 1200);
+}
+async function sair() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.href = '/login';
+}
+carregar();
+</script>
+</body>
+</html>
